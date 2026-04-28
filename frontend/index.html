@@ -294,12 +294,11 @@
 
   async function testConnection() {
     try {
-      const r = await fetch(API_URL + '/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true' },
-        body: JSON.stringify({ query: 'ping' })
+      const r = await fetch(API_URL + '/health', {
+        method: 'GET',
+        headers: { 'bypass-tunnel-reminder': 'true' }
       });
-      setStatus(r.ok || r.status < 500);
+      setStatus(r.ok);
     } catch { setStatus(false); }
   }
 
