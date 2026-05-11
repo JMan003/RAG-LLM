@@ -26,13 +26,17 @@
       command: kubectl apply -f {{ k8s_dir }}/volumes.yaml
 
     - name: Update backend deployment image
-      shell: |
-        sed -i 's|image: lawracle-backend:latest|image: {{ backend_image }}|g' {{ k8s_dir }}/backend-deployment.yaml
+      replace:
+        path: "{{ k8s_dir }}/backend-deployment.yaml"
+        regexp: 'image: lawracle-backend:latest'
+        replace: 'image: {{ backend_image }}'
       when: backend_image is defined
 
     - name: Update frontend deployment image
-      shell: |
-        sed -i 's|image: lawracle-frontend:latest|image: {{ frontend_image }}|g' {{ k8s_dir }}/frontend-deployment.yaml
+      replace:
+        path: "{{ k8s_dir }}/frontend-deployment.yaml"
+        regexp: 'image: lawracle-frontend:latest'
+        replace: 'image: {{ frontend_image }}'
       when: frontend_image is defined
 
     - name: Apply Deployments and Services
