@@ -42,8 +42,8 @@
     - name: Apply Deployments and Services
       command: kubectl apply -f {{ k8s_dir }}/backend-deployment.yaml -f {{ k8s_dir }}/frontend-deployment.yaml -f {{ k8s_dir }}/services.yaml
 
-    - name: Wait for backend pods to be ready (may take time due to model loading)
-      command: kubectl wait --for=condition=ready pod -l app=lawracle-backend --timeout=600s
+    - name: Wait for backend deployment to finish rolling update
+      command: kubectl rollout status deployment/lawracle-backend --timeout=600s
       
-    - name: Wait for frontend pods to be ready
-      command: kubectl wait --for=condition=ready pod -l app=lawracle-frontend --timeout=120s
+    - name: Wait for frontend deployment to finish rolling update
+      command: kubectl rollout status deployment/lawracle-frontend --timeout=120s
