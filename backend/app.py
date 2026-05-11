@@ -9,7 +9,7 @@ from llama_index.core import VectorStoreIndex, Document, Settings, StorageContex
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.llms.huggingface import HuggingFaceLLM
 from llama_index.core.prompts.prompts import SimpleInputPrompt
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 import fitz  # PyMuPDF
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 import chromadb
@@ -26,9 +26,9 @@ CORS(app)
 # Environment paths for containerized deployment
 DATA_DIR = os.getenv('DATA_DIR', './data')
 CHROMA_DB_PATH = os.getenv('CHROMA_DB_PATH', './chroma_db')
-# If downloading from HuggingFace, you can use "mistralai/Mistral-7B-Instruct-v0.1" 
+# If downloading from HuggingFace, you can use "TinyLlama/TinyLlama-1.1B-Chat-v1.0" for lightweight CPU runs.
 # For cached volumes, point to the mount path.
-LLM_MODEL_NAME = os.getenv('LLM_MODEL_NAME', 'mistralai/Mistral-7B-Instruct-v0.1')
+LLM_MODEL_NAME = os.getenv('LLM_MODEL_NAME', 'TinyLlama/TinyLlama-1.1B-Chat-v1.0')
 
 # Ensure directories exist
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -151,33 +151,42 @@ Use the L.E.A.P. structure:
 Keep your TOTAL response strictly under 150 words.
 """
     query_wrapper_prompt = SimpleInputPrompt(
-        "<s>[INST] " + system_prompt + "\n\n{query_str} [/INST]"
+        "<|system|>\n" + system_prompt.strip() + "</s>\n<|user|>\n{query_str}</s>\n<|assistant|>\n"
     )
 
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-    )
-    
     logger.info(f"Loading Model: {LLM_MODEL_NAME}")
-    tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL_NAME)
-    model = AutoModelForCausalLM.from_pretrained(
-        LLM_MODEL_NAME,
-        quantization_config=bnb_config,
-        device_map="auto",
-        torch_dtype=torch.float16,
-    )
+    tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL_NAME, use_fast=False)
 
-    embed_model = HuggingFaceEmbeddings(
+    if torch.cuda.is_available():
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            LLM_MODEL_NAME,
+            quantization_config=bnb_config,
+            device_map="auto",
+            torch_dtype=torch.float16,
+        )
+    else:
+        logger.warning("No GPU found! Loading model on CPU without quantization. This will be very slow and may crash if you lack sufficient RAM (16GB+ recommended).")
+        model = AutoModelForCausalLM.from_pretrained(
+            LLM_MODEL_NAME,
+            device_map="cpu",
+            torch_dtype=torch.float32,
+        )
+
+    embed_model = HuggingFaceEmbedding(
         model_name="all-MiniLM-L6-v2",
-        model_kwargs={"device": "cpu"}
+        device="cpu"
     )
 
     llm = HuggingFaceLLM(
+        model_name=LLM_MODEL_NAME,
         model=model,
         tokenizer=tokenizer,
-        context_window=3900,
+        context_window=2048,
         max_new_tokens=256,
         query_wrapper_prompt=query_wrapper_prompt,
         generate_kwargs={"temperature": 0.2, "do_sample": True},
@@ -203,7 +212,7 @@ Keep your TOTAL response strictly under 150 words.
 
     query_engine = index.as_query_engine(
         response_mode="compact",
-        similarity_top_k=3,
+        similarity_top_k=2,
     )
     logger.info("RAG pipeline ready.")
 
