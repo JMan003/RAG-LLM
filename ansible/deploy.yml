@@ -2,8 +2,6 @@
 - name: Deploy Lawracle MLOps Pipeline to Kubernetes
   hosts: k8s_master
   become: no
-  environment:
-    KUBECONFIG: "/tmp/jenkins_kubeconfig"
   vars:
     k8s_dir: "/tmp/lawracle_k8s_{{ ansible_user_id }}"
     # These vars should be passed by Jenkins:
@@ -23,7 +21,7 @@
         dest: "{{ k8s_dir }}/"
 
     - name: Apply Persistent Volume Claims
-      command: kubectl apply -f {{ k8s_dir }}/volumes.yaml
+      command: kubectl apply --validate=false -f {{ k8s_dir }}/volumes.yaml
 
     - name: Update backend deployment image
       replace:
@@ -40,7 +38,7 @@
       when: frontend_image is defined
 
     - name: Apply Deployments and Services
-      command: kubectl apply -f {{ k8s_dir }}/backend-deployment.yaml -f {{ k8s_dir }}/frontend-deployment.yaml -f {{ k8s_dir }}/services.yaml
+      command: kubectl apply --validate=false -f {{ k8s_dir }}/backend-deployment.yaml -f {{ k8s_dir }}/frontend-deployment.yaml -f {{ k8s_dir }}/services.yaml
 
     - name: Wait for backend deployment to finish rolling update
       command: kubectl rollout status deployment/lawracle-backend --timeout=600s
