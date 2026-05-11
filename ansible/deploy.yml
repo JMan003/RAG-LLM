@@ -2,6 +2,8 @@
 - name: Deploy Lawracle MLOps Pipeline to Kubernetes
   hosts: k8s_master
   become: no
+  environment:
+    KUBECONFIG: "/tmp/jenkins_kubeconfig"
   vars:
     k8s_dir: "/tmp/lawracle_k8s"
     # These vars should be passed by Jenkins:
