@@ -1,9 +1,9 @@
 ---
 - name: Deploy Lawracle MLOps Pipeline to Kubernetes
   hosts: k8s_master
-  become: yes
+  become: no
   vars:
-    k8s_dir: "/opt/lawracle/k8s"
+    k8s_dir: "/tmp/lawracle_k8s"
     # These vars should be passed by Jenkins:
     # backend_image: "johndoe/lawracle-backend:latest"
     # frontend_image: "johndoe/lawracle-frontend:latest"
