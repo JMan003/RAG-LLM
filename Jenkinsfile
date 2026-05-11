@@ -51,14 +51,11 @@ pipeline {
             steps {
                 script {
                     dir('ansible') {
-                        ansiblePlaybook(
-                            playbook: 'deploy.yml',
-                            inventory: 'inventory.ini',
-                            extraVars: [
-                                backend_image: "${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG}",
-                                frontend_image: "${DOCKER_REGISTRY}/${APP_NAME_FRONTEND}:${IMAGE_TAG}"
-                            ]
-                        )
+                        sh """
+                            ansible-playbook -i inventory.ini deploy.yml \\
+                                -e backend_image="${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG}" \\
+                                -e frontend_image="${DOCKER_REGISTRY}/${APP_NAME_FRONTEND}:${IMAGE_TAG}"
+                        """
                     }
                 }
             }
