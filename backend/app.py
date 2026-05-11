@@ -244,4 +244,4 @@ if __name__ == '__main__':
     # Init system before handling requests
     setup_rag_system()
     # In production, use Gunicorn instead of app.run
-    app.run(host='0.0.0.0', port=5000, use_reloader=False)
+    app.run(host='0.0.0.0', port=5001, use_reloader=False)
