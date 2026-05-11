@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lawracle-backend-service
+spec:
+  selector:
+    app: lawracle-backend
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 5000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lawracle-frontend-service
+spec:
+  selector:
+    app: lawracle-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  # Change to LoadBalancer or NodePort depending on environment
+  type: LoadBalancer

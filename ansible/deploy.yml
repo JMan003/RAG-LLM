@@ -1,0 +1,43 @@
+---
+- name: Deploy Lawracle MLOps Pipeline to Kubernetes
+  hosts: k8s_master
+  become: yes
+  vars:
+    k8s_dir: "/opt/lawracle/k8s"
+    # These vars should be passed by Jenkins:
+    # backend_image: "johndoe/lawracle-backend:latest"
+    # frontend_image: "johndoe/lawracle-frontend:latest"
+
+  tasks:
+    - name: Ensure Kubernetes manifest directory exists
+      file:
+        path: "{{ k8s_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy Kubernetes manifests to master node
+      copy:
+        src: "../k8s/"
+        dest: "{{ k8s_dir }}/"
+
+    - name: Apply Persistent Volume Claims
+      command: kubectl apply -f {{ k8s_dir }}/volumes.yaml
+
+    - name: Update backend deployment image
+      shell: |
+        sed -i 's|image: lawracle-backend:latest|image: {{ backend_image }}|g' {{ k8s_dir }}/backend-deployment.yaml
+      when: backend_image is defined
+
+    - name: Update frontend deployment image
+      shell: |
+        sed -i 's|image: lawracle-frontend:latest|image: {{ frontend_image }}|g' {{ k8s_dir }}/frontend-deployment.yaml
+      when: frontend_image is defined
+
+    - name: Apply Deployments and Services
+      command: kubectl apply -f {{ k8s_dir }}/backend-deployment.yaml -f {{ k8s_dir }}/frontend-deployment.yaml -f {{ k8s_dir }}/services.yaml
+
+    - name: Wait for backend pods to be ready (may take time due to model loading)
+      command: kubectl wait --for=condition=ready pod -l app=lawracle-backend --timeout=600s
+      
+    - name: Wait for frontend pods to be ready
+      command: kubectl wait --for=condition=ready pod -l app=lawracle-frontend --timeout=120s
