@@ -30,13 +30,8 @@ spec:
         volumeMounts:
         - name: chroma-data
           mountPath: /app/chroma_db
-        - name: model-cache
-          mountPath: /app/model_cache
-        # If deploying sample data, you could mount it here too
+        # Model is baked into the Docker image via Dockerfile RUN step
       volumes:
       - name: chroma-data
         persistentVolumeClaim:
           claimName: lawracle-chroma-pvc
-      - name: model-cache
-        persistentVolumeClaim:
-          claimName: lawracle-model-cache-pvc
