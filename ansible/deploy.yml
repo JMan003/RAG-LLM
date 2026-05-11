@@ -22,6 +22,10 @@
 
     - name: Apply Persistent Volume Claims
       command: kubectl apply --validate=false -f {{ k8s_dir }}/volumes.yaml
+      register: apply_pvc
+      until: apply_pvc.rc == 0
+      retries: 5
+      delay: 10
 
     - name: Update backend deployment image
       replace:
@@ -39,6 +43,10 @@
 
     - name: Apply Deployments and Services
       command: kubectl apply --validate=false -f {{ k8s_dir }}/backend-deployment.yaml -f {{ k8s_dir }}/frontend-deployment.yaml -f {{ k8s_dir }}/services.yaml
+      register: apply_deploy
+      until: apply_deploy.rc == 0
+      retries: 5
+      delay: 10
 
     - name: Wait for backend deployment to finish rolling update
       command: kubectl rollout status deployment/lawracle-backend --timeout=600s
