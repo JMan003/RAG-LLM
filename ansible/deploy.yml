@@ -5,7 +5,7 @@
   environment:
     KUBECONFIG: "/tmp/jenkins_kubeconfig"
   vars:
-    k8s_dir: "/tmp/lawracle_k8s"
+    k8s_dir: "/tmp/lawracle_k8s_{{ ansible_user_id }}"
     # These vars should be passed by Jenkins:
     # backend_image: "johndoe/lawracle-backend:latest"
     # frontend_image: "johndoe/lawracle-frontend:latest"
