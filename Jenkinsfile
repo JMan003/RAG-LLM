@@ -6,6 +6,7 @@ pipeline {
     }
 
     environment {
+        PATH = "/usr/local/bin:/opt/homebrew/bin:${env.PATH}"
         DOCKER_REGISTRY = 'adithya952' // Replace with your dockerhub username
         APP_NAME_BACKEND = 'lawracle-backend'
         APP_NAME_FRONTEND = 'lawracle-frontend'
