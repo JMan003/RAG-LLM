@@ -16,7 +16,11 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install Python packages (CPU-only PyTorch to reduce image size from 13GB to ~4GB)
+# --timeout 300: prevent read timeouts on slow network (default is 15s)
+# --retries 5: retry failed downloads up to 5 times
 RUN pip3 install --no-cache-dir \
+    --timeout 300 \
+    --retries 5 \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     -r requirements.txt
 
