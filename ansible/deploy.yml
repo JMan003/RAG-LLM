@@ -87,3 +87,10 @@
 
     - name: Wait for Kibana to be ready
       command: kubectl rollout status deployment/kibana -n logging --timeout=300s
+    
+    - name: Apply Ingress Rules
+      command: kubectl apply --validate=false -f {{ k8s_dir }}/ingress.yaml
+      register: apply_ingress
+      until: apply_ingress.rc == 0
+      retries: 5
+      delay: 10
