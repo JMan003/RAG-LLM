@@ -26,7 +26,8 @@ pipeline {
                         withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
                             sh """
                             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
-                            docker build -t ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG} .
+                            docker pull ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:latest || true
+                            docker build --cache-from ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:latest -t ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG} .
                             docker push ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG}
                             docker tag ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:latest
                             docker push ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:latest
@@ -44,7 +45,8 @@ pipeline {
                         withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
                             sh """
                             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
-                            docker build -t ${DOCKER_REGISTRY}/${APP_NAME_FRONTEND}:${IMAGE_TAG} .
+                            docker pull ${DOCKER_REGISTRY}/${APP_NAME_FRONTEND}:latest || true
+                            docker build --cache-from ${DOCKER_REGISTRY}/${APP_NAME_FRONTEND}:latest -t ${DOCKER_REGISTRY}/${APP_NAME_FRONTEND}:${IMAGE_TAG} .
                             docker push ${DOCKER_REGISTRY}/${APP_NAME_FRONTEND}:${IMAGE_TAG}
                             docker tag ${DOCKER_REGISTRY}/${APP_NAME_FRONTEND}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${APP_NAME_FRONTEND}:latest
                             docker push ${DOCKER_REGISTRY}/${APP_NAME_FRONTEND}:latest
