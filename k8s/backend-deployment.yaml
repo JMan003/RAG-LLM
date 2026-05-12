@@ -24,13 +24,14 @@ spec:
             import os
             from huggingface_hub import snapshot_download
             from sentence_transformers import SentenceTransformer
-            marker = '/app/model_cache/.download_complete'
+            repo_id = os.environ.get('LLM_MODEL_NAME', 'TinyLlama/TinyLlama-1.1B-Chat-v1.0')
+            marker = '/app/model_cache/.download_complete_' + repo_id.replace('/', '_')
             if os.path.exists(marker):
                 print('Models already cached, skipping download.')
             else:
                 os.makedirs('/app/model_cache', exist_ok=True)
-                print('Downloading TinyLlama...')
-                snapshot_download(repo_id='TinyLlama/TinyLlama-1.1B-Chat-v1.0', cache_dir='/app/model_cache')
+                print('Downloading LLM weights:', repo_id)
+                snapshot_download(repo_id=repo_id, cache_dir='/app/model_cache')
                 print('Downloading embedding model...')
                 SentenceTransformer('all-MiniLM-L6-v2', cache_folder='/app/model_cache')
                 open(marker, 'w').close()
@@ -43,6 +44,13 @@ spec:
         volumeMounts:
         - name: model-cache
           mountPath: /app/model_cache
+        resources:
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+          requests:
+            memory: "2Gi"
+            cpu: "500m"
       containers:
       - name: backend
         image: jman003/lawracle-backend:latest
@@ -51,11 +59,26 @@ spec:
         - containerPort: 5000
         resources:
           limits:
-            memory: "4Gi"
+            memory: "10Gi"
             cpu: "2"
           requests:
-            memory: "10Mi"
-            cpu: "10m"
+            memory: "4Gi"
+            cpu: "500m"
+        env:
+        - name: HF_HOME
+          value: "/app/model_cache"
+        - name: HUGGINGFACE_HUB_CACHE
+          value: "/app/model_cache"
+        - name: TRANSFORMERS_CACHE
+          value: "/app/model_cache"
+        - name: HF_HUB_CACHE
+          value: "/app/model_cache"
+        - name: TORCH_CPU_NUM_THREADS
+          value: "1"
+        - name: LOGSTASH_HOST
+          value: "logstash.logging.svc.cluster.local"
+        - name: LOGSTASH_PORT
+          value: "5044"
         volumeMounts:
         - name: chroma-data
           mountPath: /app/chroma_db

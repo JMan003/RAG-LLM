@@ -9,7 +9,7 @@ spec:
     - protocol: TCP
       port: 5000
       targetPort: 5000
-  type: LoadBalancer
+  type: ClusterIP
 ---
 apiVersion: v1
 kind: Service
@@ -23,4 +23,4 @@ spec:
       port: 80
       targetPort: 80
   # Change to LoadBalancer or NodePort depending on environment
-  type: LoadBalancer
+  type: ClusterIP

@@ -1,32 +1,36 @@
+# Core web framework
 Flask==3.0.3
 flask-cors==4.0.0
 gunicorn==21.2.0
-# CPU-only torch — use --extra-index-url https://download.pytorch.org/whl/cpu when installing
-torch==2.2.1+cpu
+
+# ML / LLM - pinned to avoid pip backtracking
+# Installed separately in the Dockerfile from the PyTorch CPU wheel index.
 transformers==4.41.2
-accelerate>=0.27.2
-# Pin llama-index and all transitive deps to stop pip backtracking
-llama-index==0.11.23
-llama-index-core==0.11.23
-llama-index-llms-huggingface==0.3.5
-llama-index-embeddings-huggingface==0.3.1
-llama-index-readers-file==0.3.0
-llama-index-legacy==0.9.48.post4
-llama-index-agent-openai==0.3.4
-llama-index-llms-openai==0.2.16
-llama-index-embeddings-openai==0.2.5
-llama-index-program-openai==0.2.0
-llama-index-question-gen-openai==0.2.0
-llama-index-multi-modal-llms-openai==0.2.3
-llama-index-cli==0.3.1
-llama-index-readers-llama-parse==0.3.0
-llama-index-indices-managed-llama-cloud==0.6.0
-llama-parse==0.6.21
-llama-cloud==0.1.19
-llama-cloud-services==0.6.21
+accelerate==0.30.1
+sentence-transformers==2.7.0
+tokenizers==0.19.1
+sentencepiece==0.2.0
+
+# huggingface-hub: must be >=0.23.0 (transformers 4.41.2 needs it)
+# NOT pinned to 0.23.4 - let pip pick compatible version in >=0.23.0,<0.24.0
+huggingface-hub>=0.23.0,<0.24.0
+
+# LlamaIndex packages must stay on the same 0.10.x line. Older core builds miss
+# symbols imported by the HuggingFace integration, and loose ranges drift apart.
+llama-index==0.10.68
+llama-index-core==0.10.68
+llama-index-llms-huggingface==0.2.8
+llama-index-embeddings-huggingface==0.2.3
+llama-index-vector-stores-chroma==0.1.10
+
+# Vector DB
 chromadb==0.4.24
-llama-index-vector-stores-chroma==0.2.2
-PyMuPDF>=1.23.26
-langchain-community>=0.0.24
-sentencepiece>=0.2.0
-huggingface-hub==0.23.5
+
+# PDF parsing
+PyMuPDF==1.23.26
+
+# LangChain (used by some llama-index integrations)
+langchain-community==0.0.24
+
+# Logstash logging
+python-logstash-async==2.5.0
