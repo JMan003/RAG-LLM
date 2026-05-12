@@ -1,13 +1,11 @@
-# Use NVIDIA CUDA base image for GPU inference
-FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+# Use slim Python base image (CPU inference — keeps image ~4GB vs 13GB)
+FROM python:3.10-slim
 
 # Set noninteractive installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Python and dependencies
-RUN apt-get update && apt-get install -y \
-    python3.10 \
-    python3-pip \
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -17,8 +15,10 @@ WORKDIR /app
 # Copy requirements
 COPY requirements.txt .
 
-# Install Python packages
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Install Python packages (CPU-only PyTorch to reduce image size from 13GB to ~4GB)
+RUN pip3 install --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r requirements.txt
 
 # Copy application code
 COPY app.py .
