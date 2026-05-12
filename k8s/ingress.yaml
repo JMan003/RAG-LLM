@@ -1,9 +1,12 @@
-# k8s/ingress.yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: lawracle-ingress
   namespace: default
+  annotations:
+    # Tell the Kubernetes Nginx edge proxy to wait up to 10 minutes
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 spec:
   rules:
   - host: lawracle.test
