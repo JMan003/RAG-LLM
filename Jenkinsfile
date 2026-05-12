@@ -6,7 +6,7 @@ pipeline {
     }
 
     environment {
-        DOCKER_REGISTRY = 'adithya952' // Replace with your dockerhub username
+        DOCKER_REGISTRY = 'jman003'
         APP_NAME_BACKEND = 'lawracle-backend'
         APP_NAME_FRONTEND = 'lawracle-frontend'
         IMAGE_TAG = "${env.BUILD_ID}"
@@ -23,7 +23,7 @@ pipeline {
             steps {
                 script {
                     dir('backend') {
-                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
+                        withCredentials([usernamePassword(credentialsId: 'DockerHubCred', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
                             sh """
                             eval \$(minikube docker-env)
                             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
@@ -42,7 +42,7 @@ pipeline {
             steps {
                 script {
                     dir('frontend') {
-                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
+                        withCredentials([usernamePassword(credentialsId: 'DockerHubCred', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
                             sh """
                             eval \$(minikube docker-env)
                             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
