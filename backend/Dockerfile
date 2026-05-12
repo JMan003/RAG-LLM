@@ -1,13 +1,11 @@
-# Use NVIDIA CUDA base image for GPU inference
-FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+# Use slim Python base image (CPU inference — keeps image ~4GB vs 13GB)
+FROM python:3.10-slim
 
 # Set noninteractive installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install Python and dependencies
-RUN apt-get update && apt-get install -y \
-    python3.10 \
-    python3-pip \
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
