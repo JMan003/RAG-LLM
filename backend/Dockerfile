@@ -14,10 +14,8 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy requirements
+# Copy and install requirements (all pinned - fast resolver, no backtracking)
 COPY requirements.txt .
-
-# Install Python packages
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy application code
