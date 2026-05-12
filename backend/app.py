@@ -1,4 +1,9 @@
 import os
+
+# Reduce allocator fragmentation before importing torch (helps peak RSS during model load).
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
+
+import gc
 import torch
 import logging
 import sys
@@ -35,10 +40,10 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(JsonFormatter())
 handlers = [handler]
 
-# Ship logs directly to Logstash via TCP if available
+# Ship logs directly to Logstash via TCP if available (set LOGSTASH_DISABLE=1 to skip when Logstash is down)
 LOGSTASH_HOST = os.getenv('LOGSTASH_HOST', '')
 LOGSTASH_PORT = int(os.getenv('LOGSTASH_PORT', '5044'))
-if LOGSTASH_HOST:
+if LOGSTASH_HOST and os.getenv('LOGSTASH_DISABLE', '').lower() not in ('1', 'true', 'yes'):
     try:
         from logstash_async.handler import AsynchronousLogstashHandler
         logstash_handler = AsynchronousLogstashHandler(
@@ -164,6 +169,8 @@ Maintain thorough documentation of all events, communications, and expenses rela
 def setup_rag_system():
     global query_engine
     logger.info("Initializing RAG pipeline...")
+    # Fewer CPU threads can lower peak memory from OpenMP/BLAS during load on small nodes.
+    torch.set_num_threads(int(os.getenv("TORCH_CPU_NUM_THREADS", "1")))
 
     system_prompt = """
 You are Lawracle, an AI legal assistant specializing in Indian law.
@@ -216,6 +223,7 @@ Keep your TOTAL response strictly under 150 words.
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
         )
+    gc.collect()
 
     embed_model = HuggingFaceEmbedding(
         model_name="all-MiniLM-L6-v2",
