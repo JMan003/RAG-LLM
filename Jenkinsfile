@@ -19,7 +19,7 @@ pipeline {
             }
         }
 
-        stage('Build & Push Backend Image') {
+        stage('Build Backend Image') {
             steps {
                 script {
                     dir('backend') {
@@ -28,11 +28,34 @@ pipeline {
                             echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
                             docker pull ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:latest || true
                             docker build --cache-from ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:latest -t ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG} .
-                            docker push ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG}
-                            docker tag ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:latest
-                            docker push ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:latest
                             """
                         }
+                    }
+                }
+            }
+        }
+
+        stage('Test Backend') {
+            steps {
+                script {
+                    dir('backend') {
+                        sh """
+                        docker run --rm -v \$(pwd)/tests:/app/tests -v \$(pwd)/requirements-test.txt:/app/requirements-test.txt ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG} sh -c "pip3 install --no-cache-dir -r requirements-test.txt && PYTHONPATH=/app pytest tests/"
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Push Backend Image') {
+            steps {
+                script {
+                    dir('backend') {
+                        sh """
+                        docker push ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG}
+                        docker tag ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:latest
+                        docker push ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:latest
+                        """
                     }
                 }
             }
