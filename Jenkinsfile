@@ -40,7 +40,7 @@ pipeline {
                 script {
                     dir('backend') {
                         sh """
-                        docker run --rm -v \$(pwd)/tests:/app/tests -v \$(pwd)/requirements-test.txt:/app/requirements-test.txt ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG} sh -c "pip3 install --no-cache-dir -r requirements-test.txt && pytest tests/"
+                        docker run --rm -v \$(pwd)/tests:/app/tests -v \$(pwd)/requirements-test.txt:/app/requirements-test.txt ${DOCKER_REGISTRY}/${APP_NAME_BACKEND}:${IMAGE_TAG} sh -c "pip3 install --no-cache-dir -r requirements-test.txt && PYTHONPATH=/app pytest tests/"
                         """
                     }
                 }
