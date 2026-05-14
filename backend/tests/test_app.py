@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
-from backend.app import truncate_text, format_leap_response
-import backend.app as app_module
+from app import truncate_text, format_leap_response
+import app as app_module
 
 def test_truncate_text():
     # Generate exactly 300 words
