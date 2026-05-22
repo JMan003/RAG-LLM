@@ -7,6 +7,7 @@ pipeline {
 
     environment {
         PATH = "/opt/homebrew/bin:/usr/local/bin:${env.PATH}"
+        DOCKER_HOST = "unix://${env.HOME}/.colima/default/docker.sock"
         DOCKER_REGISTRY = 'jman003'
         APP_NAME_BACKEND = 'lawracle-backend'
         APP_NAME_FRONTEND = 'lawracle-frontend'
