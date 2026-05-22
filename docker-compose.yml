@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lawracle-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - LLM_MODEL_NAME=TinyLlama/TinyLlama-1.1B-Chat-v1.0
+      - TORCH_CPU_NUM_THREADS=1
+    volumes:
+      - ./data:/app/data
+      - ./chroma_db:/app/chroma_db
+      - hf_model_cache:/app/model_cache
+    networks:
+      app-network:
+        aliases:
+          # Match the hardcoded Kubernetes service name in nginx.conf
+          - lawracle-backend-service.default.svc.cluster.local
+          # Match the hardcoded Logstash logger service name to allow Nginx startup
+          - logstash.logging.svc.cluster.local
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lawracle-frontend
+    ports:
+      - "8081:80"
+    networks:
+      - app-network
+    depends_on:
+      - backend
+
+networks:
+  app-network:
+    name: lawracle-network
+
+volumes:
+  hf_model_cache:
+    name: lawracle-hf-model-cache

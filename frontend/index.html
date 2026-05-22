@@ -513,6 +513,15 @@
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendQuery(); }
     });
 
+    // Determine the API base URL based on how the page is accessed
+    const getApiUrl = (endpoint) => {
+      // If accessed via file://, or on a local development port (e.g. 5500, 8000, 3000, 8080, 8081), route to the Flask backend directly
+      if (window.location.protocol === 'file:' || ['5500', '8000', '3000', '8080', '8081'].includes(window.location.port)) {
+        return `http://127.0.0.1:5000${endpoint}`;
+      }
+      return `/api${endpoint}`;
+    };
+
     // ── Status Check (Automatically runs on load) ───────────────────
     function setStatus(connected) {
       const dot = document.getElementById('status-dot');
@@ -523,8 +532,7 @@
 
     async function testConnection() {
       try {
-        // Calls relative API path handled by Nginx proxy
-        const r = await fetch('/api/health');
+        const r = await fetch(getApiUrl('/health'));
         setStatus(r.ok);
       } catch { setStatus(false); }
     }
@@ -632,8 +640,7 @@
       addTyping();
 
       try {
-        // Calls relative API path handled by Nginx proxy
-        const res = await fetch('/api/query', {
+        const res = await fetch(getApiUrl('/query'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: q })
@@ -659,7 +666,7 @@
         setStatus(false);
 
         // Log the frontend error to the backend
-        fetch('/api/log', {
+        fetch(getApiUrl('/log'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: err.message })
