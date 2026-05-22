@@ -13,6 +13,7 @@ pipeline {
         APP_NAME_FRONTEND = 'lawracle-frontend'
         IMAGE_TAG = "${env.BUILD_ID}"
         DOCKER_CONFIG = "${WORKSPACE}/.docker"
+        DOCKER_BUILDKIT = '1'
     }
 
     stages {
