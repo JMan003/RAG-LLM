@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 backend/chroma_db/
 backend/static/
+.docker/

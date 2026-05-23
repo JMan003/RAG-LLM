@@ -20,6 +20,15 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+                sh '''
+                mkdir -p "${DOCKER_CONFIG}/cli-plugins"
+                for path in "/opt/homebrew/lib/docker/cli-plugins/docker-buildx" "/usr/local/lib/docker/cli-plugins/docker-buildx" "/opt/homebrew/bin/docker-buildx" "/usr/local/bin/docker-buildx"; do
+                    if [ -f "$path" ]; then
+                        ln -sf "$path" "${DOCKER_CONFIG}/cli-plugins/docker-buildx"
+                        break
+                    fi
+                done
+                '''
             }
         }
 
