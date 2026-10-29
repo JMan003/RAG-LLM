@@ -29,7 +29,10 @@ COPY app.py ingest.py ./
 COPY evaluation ./evaluation
 
 # Fail the build (not the pod) if ingestion can't build a splitter with the real libraries.
-RUN python3 -c "import ingest; ingest.make_splitter(); print('splitter ok')"
+RUN python3 -c "import ingest; from llama_index.core.utils import get_tokenizer; \
+tok = ingest.default_chunk_tokenizer(); \
+assert tok('Section 103. Punishment for murder.') == get_tokenizer()('Section 103. Punishment for murder.'); \
+ingest.make_splitter(); print('splitter ok')"
 
 # Expose port
 EXPOSE 5000

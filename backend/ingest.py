@@ -145,17 +145,34 @@ def read_document_text(path):
         return f.read()
 
 
+def default_chunk_tokenizer():
+    """LlamaIndex's default tokenizer: tiktoken's gpt-3.5-turbo encoding.
+
+    Built explicitly (rather than read from Settings) so chunk sizes stay the
+    same, and match the existing index, even when Settings.tokenizer is set to
+    the LLM's own tokenizer for prompt packing.
+    """
+    from functools import partial
+
+    import llama_index.core
+    import tiktoken
+
+    # Use the encoding file bundled with LlamaIndex, as its default does.
+    os.environ.setdefault(
+        "TIKTOKEN_CACHE_DIR",
+        os.path.join(os.path.dirname(llama_index.core.__file__), "_static", "tiktoken_cache"),
+    )
+    encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
+    return partial(encoding.encode, allowed_special="all")
+
+
 def make_splitter():
     from llama_index.core.node_parser import SentenceSplitter
-    from llama_index.core.utils import globals_helper
 
-    # Measure chunks with LlamaIndex's default tiktoken tokenizer explicitly, so
-    # chunking stays stable (and matches the existing index) even when
-    # Settings.tokenizer is set to the LLM's tokenizer for prompt packing.
     return SentenceSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
-        tokenizer=globals_helper.tokenizer,
+        tokenizer=default_chunk_tokenizer(),
     )
 
 
