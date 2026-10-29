@@ -10,7 +10,7 @@ services:
       - "5000:5000"
     environment:
       - LLM_MODEL_NAME=TinyLlama/TinyLlama-1.1B-Chat-v1.0
-      - TORCH_CPU_NUM_THREADS=1
+      - TORCH_CPU_NUM_THREADS=4
     volumes:
       - ./data:/app/data
       - ./chroma_db:/app/chroma_db

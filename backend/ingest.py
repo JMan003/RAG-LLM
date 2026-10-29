@@ -147,8 +147,16 @@ def read_document_text(path):
 
 def make_splitter():
     from llama_index.core.node_parser import SentenceSplitter
+    from llama_index.core.utils import globals_helper
 
-    return SentenceSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+    # Measure chunks with LlamaIndex's default tiktoken tokenizer explicitly, so
+    # chunking stays stable (and matches the existing index) even when
+    # Settings.tokenizer is set to the LLM's tokenizer for prompt packing.
+    return SentenceSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+        tokenizer=globals_helper.tokenizer,
+    )
 
 
 def build_nodes(source, text, file_hash, splitter):

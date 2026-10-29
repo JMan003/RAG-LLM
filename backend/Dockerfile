@@ -28,6 +28,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY app.py ingest.py ./
 COPY evaluation ./evaluation
 
+# Fail the build (not the pod) if ingestion can't build a splitter with the real libraries.
+RUN python3 -c "import ingest; ingest.make_splitter(); print('splitter ok')"
+
 # Expose port
 EXPOSE 5000
 

@@ -247,11 +247,13 @@ Keep your TOTAL response strictly under 150 words.
             torch_dtype=torch.float16,
         )
     else:
-        logger.warning("No GPU found! Loading model on CPU with float16 to reduce memory usage.")
+        # float32 on CPU: PyTorch's CPU kernels are optimised for it, and half
+        # precision there is several times slower. Costs ~4.5 GB for TinyLlama.
+        logger.warning("No GPU found! Loading model on CPU in float32.")
         model = AutoModelForCausalLM.from_pretrained(
             LLM_MODEL_NAME,
             device_map="cpu",
-            torch_dtype=torch.float16,
+            torch_dtype=torch.float32,
             low_cpu_mem_usage=True,
         )
     gc.collect()
@@ -273,6 +275,10 @@ Keep your TOTAL response strictly under 150 words.
 
     Settings.llm = llm
     Settings.embed_model = embed_model
+    # Count prompt tokens with the LLM's own tokenizer (LlamaIndex defaults to
+    # tiktoken, which undercounts for Llama models), so retrieved chunks are
+    # packed to fit the 2048-token window instead of overflowing it.
+    Settings.tokenizer = tokenizer.encode
     Settings.chunk_size = ingest.CHUNK_SIZE
     Settings.chunk_overlap = ingest.CHUNK_OVERLAP
 
