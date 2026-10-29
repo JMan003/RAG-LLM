@@ -6,6 +6,15 @@ metadata:
     app: lawracle-backend
 spec:
   replicas: 1
+  # Stop the old pod before starting the new one. Both would otherwise open the
+  # same ChromaDB volume, which is not safe for two writers, and hold two models
+  # in memory. Costs a short outage per deploy.
+  strategy:
+    type: Recreate
+  # Startup can include loading the model and re-embedding every document (when
+  # chunk settings change), which takes well over the default 10 minutes.
+  # Matches the Ansible rollout wait.
+  progressDeadlineSeconds: 1800
   selector:
     matchLabels:
       app: lawracle-backend
