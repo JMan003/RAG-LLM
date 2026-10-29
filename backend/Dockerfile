@@ -14,9 +14,15 @@ WORKDIR /app
 
 # Copy and install requirements (all pinned - fast resolver, no backtracking)
 COPY requirements.txt .
+# Take only torch itself from the PyTorch CPU index (--no-deps): newer pip rejects
+# some packages mirrored there (e.g. typing_extensions) for inconsistent names.
+# torch's own dependencies come from PyPI, listed explicitly below.
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install --retries 5 --timeout 300 --index-url https://download.pytorch.org/whl/cpu torch==2.2.1 && \
-    pip3 install --retries 5 --timeout 300 -r requirements.txt
+    pip3 install --retries 5 --timeout 300 --no-deps \
+        --index-url https://download.pytorch.org/whl/cpu torch==2.2.1 && \
+    pip3 install --retries 5 --timeout 300 -r requirements.txt \
+        filelock "typing-extensions>=4.8.0" "sympy==1.12" networkx jinja2 fsspec && \
+    python3 -c "import torch, sentence_transformers, llama_index.core; print('torch', torch.__version__)"
 
 # Copy application code
 COPY app.py ingest.py ./
