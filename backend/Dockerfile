@@ -20,6 +20,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 # Copy application code
 COPY app.py ingest.py ./
+COPY evaluation ./evaluation
 
 # Expose port
 EXPOSE 5000
