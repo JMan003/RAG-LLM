@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install --retries 5 --timeout 300 -r requirements.txt
 
 # Copy application code
-COPY app.py .
+COPY app.py ingest.py ./
 
 # Expose port
 EXPOSE 5000
@@ -32,5 +32,7 @@ ENV HF_HOME=/app/model_cache
 ENV TRANSFORMERS_CACHE=/app/model_cache
 ENV HF_HUB_CACHE=/app/model_cache
 
-# Run the app with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "900", "--workers", "1", "app:app"]
+# Run the app with gunicorn. One worker (one model in memory) with several threads,
+# so /health and /livez still answer while a long CPU generation is running;
+# app.py serialises generations with a lock.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "900", "--workers", "1", "--threads", "4", "app:app"]

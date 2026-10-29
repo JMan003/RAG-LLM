@@ -4,22 +4,25 @@ import os
 os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
 
 import gc
+import threading
+import uuid
 import torch
 import logging
 import sys
 import time
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
 
-from llama_index.core import VectorStoreIndex, Document, Settings, StorageContext
-from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core import VectorStoreIndex, Settings
 from llama_index.llms.huggingface import HuggingFaceLLM
 from llama_index.core.prompts.prompts import SimpleInputPrompt
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-import fitz  # PyMuPDF
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 import chromadb
 from llama_index.vector_stores.chroma import ChromaVectorStore
+
+import ingest
 
 # Set up structured JSON logging for ELK stack
 import json
@@ -77,6 +80,8 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
+# Uploads larger than this are rejected by Flask with 413 before reaching our code.
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "25")) * 1024 * 1024
 
 # --- MIDDLEWARE FOR REQUEST/RESPONSE LOGGING ---
 @app.before_request
@@ -130,59 +135,15 @@ os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(CHROMA_DB_PATH, exist_ok=True)
 
 query_engine = None
+rag_index = None
+chroma_collection = None
+text_splitter = None
+init_error = None
 
-def extract_text_from_pdf(pdf_path):
-    try:
-        text = ""
-        with fitz.open(pdf_path) as doc:
-            for page in doc:
-                text += page.get_text()
-        return text
-    except Exception as e:
-        logger.error(f"Error extracting text from {pdf_path}: {str(e)}")
-        return ""
-
-def load_and_process_documents():
-    logger.info("Loading documents...")
-    documents = []
-    
-    if not os.path.exists(DATA_DIR):
-        return []
-
-    files = [f for f in os.listdir(DATA_DIR) if os.path.isfile(os.path.join(DATA_DIR, f))]
-
-    for filename in files:
-        file_path = os.path.join(DATA_DIR, filename)
-        try:
-            if filename.lower().endswith('.pdf'):
-                text = extract_text_from_pdf(file_path)
-                if not text.strip():
-                    continue
-            elif filename.lower().endswith(('.txt', '.md')):
-                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    text = f.read()
-            else:
-                continue
-
-            documents.append(Document(text=text, metadata={"source": filename}))
-            logger.info(f"Loaded {filename}")
-        except Exception as e:
-            logger.error(f"Error processing {filename}: {str(e)}")
-
-    return documents
-
-def create_vector_index(documents, embed_model, chroma_collection):
-    logger.info(f"Creating vector index from {len(documents)} documents...")
-    text_splitter = SentenceSplitter(chunk_size=512, chunk_overlap=50)
-    
-    nodes = []
-    for doc in documents:
-        nodes.extend(text_splitter.get_nodes_from_documents([doc]))
-
-    vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-    storage_context = StorageContext.from_defaults(vector_store=vector_store)
-    index = VectorStoreIndex(nodes, storage_context=storage_context)
-    return index
+# Serialises index writes (startup sync, uploads, deletes).
+ingest_lock = threading.Lock()
+# One model instance is shared by all request threads; run one generation at a time.
+inference_lock = threading.Lock()
 
 def truncate_text(text, max_words=200):
     words = text.split()
@@ -225,7 +186,16 @@ Maintain thorough documentation of all events, communications, and expenses rela
     return formatted_response
 
 def setup_rag_system():
-    global query_engine
+    """Background initialisation. Records failure so /livez can report it."""
+    global init_error
+    try:
+        _setup_rag_system()
+    except Exception as e:
+        init_error = f"{type(e).__name__}: {e}"
+        logger.exception("RAG pipeline initialization failed")
+
+def _setup_rag_system():
+    global query_engine, rag_index, chroma_collection, text_splitter
     logger.info("Initializing RAG pipeline...")
     # Fewer CPU threads can lower peak memory from OpenMP/BLAS during load on small nodes.
     torch.set_num_threads(int(os.getenv("TORCH_CPU_NUM_THREADS", "1")))
@@ -300,22 +270,24 @@ Keep your TOTAL response strictly under 150 words.
 
     Settings.llm = llm
     Settings.embed_model = embed_model
-    Settings.chunk_size = 512
-    Settings.chunk_overlap = 50
+    Settings.chunk_size = ingest.CHUNK_SIZE
+    Settings.chunk_overlap = ingest.CHUNK_OVERLAP
 
     chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-    chroma_collection = chroma_client.get_or_create_collection("lawracle_docs")
+    collection = chroma_client.get_or_create_collection("lawracle_docs")
+    logger.info(f"Opened ChromaDB collection ({collection.count()} chunks)")
 
-    if chroma_collection.count() > 0:
-        logger.info(f"Loaded existing ChromaDB ({chroma_collection.count()} chunks)")
-        vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-        index = VectorStoreIndex.from_vector_store(vector_store)
-    else:
-        documents = load_and_process_documents()
-        if not documents:
-            documents = [Document(text="Sample legal text.", metadata={"source": "sample"})]
-        index = create_vector_index(documents, embed_model, chroma_collection)
+    vector_store = ChromaVectorStore(chroma_collection=collection)
+    index = VectorStoreIndex.from_vector_store(vector_store)
+    splitter = ingest.make_splitter()
 
+    # Embed only files that are new or changed since they were last indexed.
+    with ingest_lock:
+        ingest.sync_index(index, collection, DATA_DIR, splitter)
+
+    chroma_collection = collection
+    rag_index = index
+    text_splitter = splitter
     query_engine = index.as_query_engine(
         response_mode="compact",
         similarity_top_k=2,
@@ -324,7 +296,101 @@ Keep your TOTAL response strictly under 150 words.
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"status": "ok", "model": "lawracle", "ready": query_engine is not None})
+    """Readiness: 200 only once the pipeline can answer queries."""
+    if init_error:
+        return jsonify({"status": "error", "model": "lawracle", "ready": False}), 500
+    if query_engine is None:
+        return jsonify({"status": "initializing", "model": "lawracle", "ready": False}), 503
+    return jsonify({"status": "ok", "model": "lawracle", "ready": True})
+
+@app.route('/livez', methods=['GET'])
+def livez():
+    """Liveness: the process is serving and initialisation has not failed.
+
+    Stays 200 while models load, so a slow start is not mistaken for a crash,
+    but turns 500 if initialisation raised, so Kubernetes restarts the pod.
+    """
+    if init_error:
+        return jsonify({"status": "error"}), 500
+    return jsonify({"status": "alive"})
+
+@app.route('/documents', methods=['GET'])
+def list_documents():
+    if chroma_collection is None:
+        return jsonify({"error": "Pipeline initializing"}), 503
+    counts = ingest.chunk_counts(chroma_collection)
+    documents = [{"source": name, "chunks": n} for name, n in sorted(counts.items())]
+    return jsonify({"documents": documents, "total_chunks": sum(counts.values())})
+
+@app.route('/documents', methods=['POST'])
+def upload_document():
+    """Add or replace one document. Re-uploading a file name replaces that document."""
+    if query_engine is None:
+        return jsonify({"error": "Pipeline initializing"}), 503
+
+    upload = request.files.get('file')
+    if upload is None or not upload.filename:
+        return jsonify({"error": "Send the document as multipart form field 'file'"}), 400
+
+    filename = secure_filename(upload.filename)
+    if not filename or not ingest.is_supported(filename):
+        allowed = ", ".join(ingest.SUPPORTED_EXTENSIONS)
+        return jsonify({"error": f"Unsupported file type; allowed: {allowed}"}), 400
+
+    final_path = os.path.join(DATA_DIR, filename)
+    # Hidden temp name: ignored by the startup sync if we crash mid-upload.
+    tmp_path = os.path.join(DATA_DIR, f".upload-{uuid.uuid4().hex}.tmp")
+
+    with ingest_lock:
+        try:
+            upload.save(tmp_path)
+            file_hash = ingest.file_sha256(tmp_path)
+            if ingest.indexed_sources(chroma_collection).get(filename) == file_hash:
+                # Already indexed; just make sure the file itself is on disk.
+                if os.path.exists(final_path):
+                    os.remove(tmp_path)
+                else:
+                    os.replace(tmp_path, final_path)
+                return jsonify({"source": filename, "status": "unchanged", "chunks": 0})
+
+            if not ingest.read_document_text(tmp_path).strip():
+                os.remove(tmp_path)
+                return jsonify({"error": "No extractable text (scanned PDFs need OCR first)"}), 422
+
+            existed = os.path.exists(final_path)
+            os.replace(tmp_path, final_path)
+            chunks = ingest.index_file(
+                rag_index, chroma_collection, filename, final_path, text_splitter, file_hash
+            )
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            logger.exception(f"Failed to ingest uploaded file {filename}")
+            return jsonify({"error": "Failed to ingest document"}), 500
+
+    status = "updated" if existed else "added"
+    logger.info(f"Document {filename} {status} ({chunks} chunks)")
+    return jsonify({"source": filename, "status": status, "chunks": chunks}), 201
+
+@app.route('/documents/<path:filename>', methods=['DELETE'])
+def delete_document(filename):
+    if chroma_collection is None:
+        return jsonify({"error": "Pipeline initializing"}), 503
+
+    # Match names exactly (existing files contain spaces), but never leave DATA_DIR.
+    if os.path.basename(filename) != filename or filename.startswith(".") or "\\" in filename:
+        return jsonify({"error": "Invalid document name"}), 400
+
+    with ingest_lock:
+        removed_chunks = ingest.delete_source(chroma_collection, filename)
+        path = os.path.join(DATA_DIR, filename)
+        file_removed = os.path.isfile(path)
+        if file_removed:
+            os.remove(path)
+
+    if removed_chunks == 0 and not file_removed:
+        return jsonify({"error": f"No document named {filename}"}), 404
+    return jsonify({"source": filename, "removed_chunks": removed_chunks})
 
 @app.route('/query', methods=['POST'])
 def process_query():
@@ -336,9 +402,10 @@ def process_query():
         return jsonify({"error": "No query provided"}), 400
 
     query = data['query']
-    
+
     try:
-        raw_response = query_engine.query(query)
+        with inference_lock:
+            raw_response = query_engine.query(query)
         formatted_response = format_leap_response(query, str(raw_response))
         return jsonify({"response": formatted_response})
     except Exception as e:
@@ -353,8 +420,6 @@ def receive_frontend_log():
     # Log it as an error, but let Kibana know it came from the frontend UI
     logger.error(f"Frontend UI Error: {data.get('message')}", extra={"service": "lawracle-frontend-ui"})
     return jsonify({"status": "logged"})
-
-import threading
 
 # Start initialization in background so Gunicorn binds instantly and doesn't timeout
 threading.Thread(target=setup_rag_system, daemon=True).start()

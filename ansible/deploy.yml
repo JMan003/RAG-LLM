@@ -83,7 +83,7 @@
       delay: 10
 
     - name: Wait for backend deployment to finish rolling update
-      command: kubectl rollout status deployment/lawracle-backend --timeout=600s
+      command: kubectl rollout status deployment/lawracle-backend --timeout=1800s
       
     - name: Wait for frontend deployment to finish rolling update
       command: kubectl rollout status deployment/lawracle-frontend --timeout=600s
