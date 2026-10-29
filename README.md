@@ -19,7 +19,7 @@ This method spins up both the Python Flask backend and the Nginx frontend in con
 2. **Access the application**:
    - Open your browser and navigate to: **[http://localhost:8081](http://localhost:8081)**
 3. **Adding documents**:
-   - Place your PDF, TXT, or MD documents into the `./data` directory. The backend will automatically parse and vectorize them on startup.
+   - Place your PDF, TXT, or MD documents into the `./data` directory. On startup the backend indexes only files that are new or changed since the last run (tracked by SHA-256 hash), or upload them while it runs (see [Managing documents](#managing-documents)).
 
 *Note: The first startup will download the `TinyLlama` model (~2.2GB), which will be cached in a Docker volume for subsequent starts.*
 
@@ -53,3 +53,63 @@ If you prefer not to use Docker, you can run the Flask backend and serve the fro
 #### 2. Open the Frontend
 1. Double-click the `frontend/index.html` file to open it directly in your browser (`file:///...`), or serve it using a lightweight server (e.g. `npx serve` or `python -m http.server`).
 2. The frontend is configured to automatically route API requests to `http://127.0.0.1:5000` when running locally.
+
+---
+
+## API
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/query` | Ask a question: `{"query": "..."}` |
+| `GET` | `/health` | Readiness: `200` once models are loaded and the index is synced, `503` while starting, `500` if startup failed |
+| `GET` | `/livez` | Liveness: `200` while the process is healthy (including while loading), `500` if startup failed |
+| `GET` | `/documents` | List indexed documents and their chunk counts |
+| `POST` | `/documents` | Upload a PDF/TXT/MD file (multipart field `file`, max 25 MB); re-uploading a name replaces it |
+| `DELETE` | `/documents/<name>` | Remove a document's chunks and file |
+
+Through the frontend or ingress, prefix these paths with `/api`.
+
+## Managing documents
+
+Every chunk stores its source file name and the file's SHA-256 hash. At startup the backend compares the
+data directory with the index and embeds only new or changed files, so restarts don't re-embed everything
+and new files are never silently ignored. Indexed documents whose file is missing are kept (and logged),
+never deleted automatically; remove them explicitly with `DELETE /documents/<name>`.
+
+In Kubernetes, documents live on the `lawracle-data-pvc` volume. Seed it by uploading the bundled acts:
+
+```bash
+for f in data/*.pdf; do curl -sS -F "file=@$f" http://lawracle.test/api/documents; echo; done
+```
+
+Uploaded file names are sanitised (spaces become underscores).
+
+## Evaluating retrieval
+
+`backend/evaluation/questions.jsonl` holds 34 questions covering all 22 acts. Each names the act that
+answers it and a phrase from the relevant section. The script reports, for each k:
+
+- **document hit@k**: a chunk from the right act is in the top k
+- **chunk hit@k**: that chunk also contains the expected phrase
+
+It also reports MRR, retrieval latency (p50/p95), and the questions whose answer the app misses with its
+current `similarity_top_k=2`.
+
+```bash
+# Docker Compose
+docker compose exec backend python evaluation/eval_retrieval.py --top-k 8
+
+# Kubernetes
+kubectl exec deploy/lawracle-backend -- python evaluation/eval_retrieval.py --json-out /tmp/eval.json
+```
+
+Use it to compare settings such as chunk size or `similarity_top_k` before changing them.
+
+## Tests
+
+```bash
+cd backend && pip install -r requirements-test.txt && PYTHONPATH=. pytest tests/
+```
+
+Jenkins runs the same suite inside the built image before pushing it.
+

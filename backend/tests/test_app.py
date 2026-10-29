@@ -23,10 +23,30 @@ def test_format_leap_response_property():
     res = format_leap_response("dispute with my tenant", "raw context from LLM")
     assert "property dispute" in res
 
-def test_health_endpoint(client):
+def test_health_not_ready_while_initializing(client, mocker):
+    mocker.patch.object(app_module, 'query_engine', None)
+    mocker.patch.object(app_module, 'init_error', None)
+    response = client.get('/health')
+    assert response.status_code == 503
+    assert response.json['ready'] is False
+
+def test_health_ready(client, mocker):
+    mocker.patch.object(app_module, 'query_engine', MagicMock())
+    mocker.patch.object(app_module, 'init_error', None)
     response = client.get('/health')
     assert response.status_code == 200
     assert response.json['status'] == 'ok'
+
+def test_health_and_livez_report_init_failure(client, mocker):
+    mocker.patch.object(app_module, 'init_error', 'OSError: model missing')
+    assert client.get('/health').status_code == 500
+    assert client.get('/livez').status_code == 500
+
+def test_livez_alive_while_initializing(client, mocker):
+    mocker.patch.object(app_module, 'query_engine', None)
+    mocker.patch.object(app_module, 'init_error', None)
+    response = client.get('/livez')
+    assert response.status_code == 200
 
 def test_log_endpoint(client):
     response = client.post('/log', json={'message': 'test error'})
