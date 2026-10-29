@@ -66,7 +66,8 @@ def test_upload_adds_document(client, ready_app):
 def test_upload_same_content_is_unchanged(client, ready_app):
     content = b'Section 2. Definitions.'
     file_hash = hashlib.sha256(content).hexdigest()
-    ready_app["collection"].chunks.append(("2", {"source": "defs.txt", "file_hash": file_hash}))
+    ready_app["collection"].chunks.append(
+        ("2", {"source": "defs.txt", "file_hash": file_hash, "chunk_config": ingest.CHUNK_CONFIG}))
 
     response = upload(client, 'defs.txt', content)
     assert response.status_code == 200

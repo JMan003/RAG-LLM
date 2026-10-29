@@ -13,8 +13,8 @@ Run it where the index lives, e.g. inside the backend container:
     python evaluation/eval_retrieval.py
     python evaluation/eval_retrieval.py --top-k 8 --json-out results.json
 
-The app currently answers with the top 2 chunks (similarity_top_k=2), so
-hit@2 is the number that reflects what users get today.
+The app answers with its top SIMILARITY_TOP_K chunks (default 4), so hit@k
+at that k is the number that reflects what users get.
 """
 
 import argparse
@@ -26,7 +26,7 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-APP_TOP_K = 2
+APP_TOP_K = int(os.getenv("SIMILARITY_TOP_K", "4"))
 
 
 def normalize(text):
@@ -101,6 +101,9 @@ def build_retriever(chroma_path, collection_name, embed_model_name, top_k):
     index = VectorStoreIndex.from_vector_store(
         ChromaVectorStore(chroma_collection=collection), embed_model=embed_model
     )
+    configs = sorted(str(c) for c in {(md or {}).get("chunk_config")
+                                      for md in collection.get(include=["metadatas"])["metadatas"]})
+    print(f"Index chunk settings (size/overlap): {', '.join(configs)}")
     return index.as_retriever(similarity_top_k=top_k), collection.count()
 
 

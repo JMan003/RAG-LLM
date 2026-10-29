@@ -92,8 +92,8 @@ answers it and a phrase from the relevant section. The script reports, for each 
 - **document hit@k**: a chunk from the right act is in the top k
 - **chunk hit@k**: that chunk also contains the expected phrase
 
-It also reports MRR, retrieval latency (p50/p95), and the questions whose answer the app misses with its
-current `similarity_top_k=2`.
+It also reports MRR, retrieval latency (p50/p95), and the questions whose act is missing from the app's
+top `SIMILARITY_TOP_K` results.
 
 ```bash
 # Docker Compose
@@ -103,7 +103,22 @@ docker compose exec backend python evaluation/eval_retrieval.py --top-k 8
 kubectl exec deploy/lawracle-backend -- python evaluation/eval_retrieval.py --json-out /tmp/eval.json
 ```
 
-Use it to compare settings such as chunk size or `similarity_top_k` before changing them.
+Use it to compare settings before changing them.
+
+## Retrieval settings
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CHUNK_SIZE` | `256` | Tokens per chunk |
+| `CHUNK_OVERLAP` | `50` | Tokens shared between neighbouring chunks |
+| `SIMILARITY_TOP_K` | `4` | Chunks retrieved per query |
+
+Each chunk records the chunk settings it was built with, so changing `CHUNK_SIZE` or `CHUNK_OVERLAP`
+re-embeds every document once on the next startup. Keep `CHUNK_SIZE x SIMILARITY_TOP_K` around 1024 so
+the retrieved text, prompt and answer fit TinyLlama's 2048-token window in one generation call.
+
+Baseline on the 34-question set with the previous settings (512 tokens, top 2): the right act was in the
+top 2 for 97.1% of questions, but the exact section only 55.9% of the time (73.5% at top 4).
 
 ## Tests
 

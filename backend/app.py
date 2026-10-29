@@ -129,6 +129,9 @@ CHROMA_DB_PATH = os.getenv('CHROMA_DB_PATH', './chroma_db')
 # If downloading from HuggingFace, you can use "TinyLlama/TinyLlama-1.1B-Chat-v1.0" for lightweight CPU runs.
 # For cached volumes, point to the mount path.
 LLM_MODEL_NAME = os.getenv('LLM_MODEL_NAME', 'TinyLlama/TinyLlama-1.1B-Chat-v1.0')
+# Chunks retrieved per query. 4 x 256-token chunks (see ingest.CHUNK_SIZE) plus the
+# prompt and 100 new tokens fit TinyLlama's 2048-token window in a single call.
+SIMILARITY_TOP_K = int(os.getenv('SIMILARITY_TOP_K', '4'))
 
 # Ensure directories exist
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -290,7 +293,7 @@ Keep your TOTAL response strictly under 150 words.
     text_splitter = splitter
     query_engine = index.as_query_engine(
         response_mode="compact",
-        similarity_top_k=2,
+        similarity_top_k=SIMILARITY_TOP_K,
     )
     logger.info("RAG pipeline ready.")
 
@@ -345,7 +348,7 @@ def upload_document():
         try:
             upload.save(tmp_path)
             file_hash = ingest.file_sha256(tmp_path)
-            if ingest.indexed_sources(chroma_collection).get(filename) == file_hash:
+            if ingest.indexed_sources(chroma_collection).get(filename) == ingest.fingerprint(file_hash):
                 # Already indexed; just make sure the file itself is on disk.
                 if os.path.exists(final_path):
                     os.remove(tmp_path)

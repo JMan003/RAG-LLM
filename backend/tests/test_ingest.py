@@ -41,14 +41,40 @@ def test_file_sha256_matches_hashlib(tmp_path):
     assert ingest.file_sha256(str(path), block_size=7) == hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def test_indexed_sources_prefers_known_hash(make_collection):
+def test_indexed_sources_prefers_known_fingerprint(make_collection):
     collection = make_collection([
-        ("1", {"source": "a.pdf"}),                     # legacy chunk
-        ("2", {"source": "a.pdf", "file_hash": "h1"}),
+        ("1", {"source": "a.pdf"}),                                          # legacy chunk
+        ("2", {"source": "a.pdf", "file_hash": "h1", "chunk_config": "256/50"}),
         ("3", {"source": "b.pdf"}),
-        ("4", {"other": "no source"}),
+        ("4", {"source": "c.pdf", "file_hash": "h3"}),                       # hash, no config
+        ("5", {"other": "no source"}),
     ])
-    assert ingest.indexed_sources(collection) == {"a.pdf": "h1", "b.pdf": None}
+    assert ingest.indexed_sources(collection) == {
+        "a.pdf": "h1|256/50", "b.pdf": None, "c.pdf": None,
+    }
+
+
+def test_fingerprint_includes_chunk_settings():
+    assert ingest.fingerprint("h1") == f"h1|{ingest.CHUNK_CONFIG}"
+    assert ingest.fingerprint("h1", "512/50") != ingest.fingerprint("h1", "256/50")
+
+
+def test_changed_chunk_settings_trigger_reindex(tmp_path, monkeypatch, make_collection):
+    (tmp_path / "act.txt").write_text("Section 1. Short title.")
+    file_hash = ingest.file_sha256(str(tmp_path / "act.txt"))
+    # Indexed earlier with different chunk settings.
+    collection = make_collection([
+        ("1", {"source": "act.txt", "file_hash": file_hash, "chunk_config": "512/50"}),
+    ])
+    calls = []
+    monkeypatch.setattr(ingest, "index_file",
+                        lambda index, coll, source, path, splitter, file_hash=None:
+                        calls.append((source, file_hash)) or 7)
+
+    summary = ingest.sync_index(None, collection, str(tmp_path), None)
+
+    assert summary["updated"] == ["act.txt"]
+    assert calls == [("act.txt", file_hash)]  # raw content hash, not the fingerprint
 
 
 def test_delete_source_removes_only_that_source(make_collection):
@@ -67,7 +93,8 @@ def test_sync_index_indexes_only_new_and_changed(tmp_path, monkeypatch, make_col
     same_hash = ingest.file_sha256(str(tmp_path / "same.txt"))
 
     collection = make_collection([
-        ("1", {"source": "same.txt", "file_hash": same_hash}),
+        ("1", {"source": "same.txt", "file_hash": same_hash,
+               "chunk_config": ingest.CHUNK_CONFIG}),
         ("2", {"source": "orphan.txt", "file_hash": "x"}),
     ])
 

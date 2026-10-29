@@ -1,12 +1,15 @@
 """Incremental document ingestion for the Lawracle RAG backend.
 
-Every chunk stored in ChromaDB carries two metadata fields:
-  - ``source``:    the file name the chunk came from
-  - ``file_hash``: SHA-256 of that file's bytes when it was indexed
+Every chunk stored in ChromaDB carries three metadata fields:
+  - ``source``:       the file name the chunk came from
+  - ``file_hash``:    SHA-256 of that file's bytes when it was indexed
+  - ``chunk_config``: the chunking settings used, e.g. "256/50"
 
 On startup (and on upload) we compare the files in the data directory with
 what is already indexed and only embed what is new or changed, instead of
 indexing everything once and then ignoring the data directory forever.
+Changing CHUNK_SIZE or CHUNK_OVERLAP re-embeds every document once, because
+their stored chunk_config no longer matches.
 
 Indexed sources whose file is missing from the data directory are *kept* and
 logged, never deleted automatically: removing documents is an explicit action
@@ -27,8 +30,14 @@ logger = logging.getLogger(__name__)
 SUPPORTED_EXTENSIONS = (".pdf", ".txt", ".md")
 SOURCE_KEY = "source"
 HASH_KEY = "file_hash"
-CHUNK_SIZE = 512
-CHUNK_OVERLAP = 50
+CONFIG_KEY = "chunk_config"
+# Tuned with evaluation/eval_retrieval.py: 256-token chunks with the top 4
+# retrieved fill the same context as 512 x 2 but find the right section more often.
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "256"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "50"))
+CHUNK_CONFIG = f"{CHUNK_SIZE}/{CHUNK_OVERLAP}"
+# Bookkeeping fields that must not be embedded or shown to the LLM.
+INTERNAL_KEYS = [HASH_KEY, CONFIG_KEY]
 
 
 @dataclass
@@ -68,11 +77,17 @@ def list_data_files(data_dir):
     return files
 
 
-def plan_sync(current, indexed):
-    """Compare {filename: hash} on disk with {filename: hash or None} in the index.
+def fingerprint(file_hash, chunk_config=None):
+    """What must match for a file's chunks to be reusable: content and chunking."""
+    return f"{file_hash}|{chunk_config or CHUNK_CONFIG}"
 
-    A ``None`` indexed hash means chunks were written before hashes were
-    recorded; those files are re-indexed once so they gain a hash.
+
+def plan_sync(current, indexed):
+    """Compare {filename: fingerprint} on disk with the index.
+
+    ``indexed`` maps filename to a fingerprint, or ``None`` for chunks written
+    before hashes and chunk settings were recorded; those files are re-indexed
+    once so they gain both.
     """
     plan = SyncPlan()
     for name in sorted(current):
@@ -87,7 +102,11 @@ def plan_sync(current, indexed):
 
 
 def indexed_sources(collection):
-    """Return {source: file_hash or None} for everything in the collection."""
+    """Return {source: fingerprint or None} for everything in the collection.
+
+    The fingerprint is ``None`` when chunks lack a hash or chunk settings
+    (written by an older version), which forces a one-off re-index.
+    """
     result = collection.get(include=["metadatas"])
     sources = {}
     for metadata in result.get("metadatas") or []:
@@ -95,10 +114,13 @@ def indexed_sources(collection):
             continue
         name = metadata[SOURCE_KEY]
         file_hash = metadata.get(HASH_KEY)
-        # Keep a known hash if any chunk of this source has one.
+        chunk_config = metadata.get(CONFIG_KEY)
+        value = fingerprint(file_hash, chunk_config) if file_hash and chunk_config else None
+        # Keep a known fingerprint if any chunk of this source has one.
         if sources.get(name) is None:
-            sources[name] = file_hash
+            sources[name] = value
     return sources
+
 
 
 def chunk_counts(collection):
@@ -134,10 +156,10 @@ def build_nodes(source, text, file_hash, splitter):
 
     document = Document(
         text=text,
-        metadata={SOURCE_KEY: source, HASH_KEY: file_hash},
-        # The hash is bookkeeping: keep it out of embeddings and LLM prompts.
-        excluded_embed_metadata_keys=[HASH_KEY],
-        excluded_llm_metadata_keys=[HASH_KEY],
+        metadata={SOURCE_KEY: source, HASH_KEY: file_hash, CONFIG_KEY: CHUNK_CONFIG},
+        # Bookkeeping only: keep it out of embeddings and LLM prompts.
+        excluded_embed_metadata_keys=INTERNAL_KEYS,
+        excluded_llm_metadata_keys=INTERNAL_KEYS,
     )
     return splitter.get_nodes_from_documents([document])
 
@@ -168,14 +190,16 @@ def index_file(index, collection, source, path, splitter, file_hash=None):
 def sync_index(index, collection, data_dir, splitter):
     """Bring the index up to date with data_dir. Returns a summary dict."""
     files = list_data_files(data_dir)
-    current = {name: file_sha256(path) for name, path in files.items()}
+    hashes = {name: file_sha256(path) for name, path in files.items()}
+    current = {name: fingerprint(h) for name, h in hashes.items()}
     plan = plan_sync(current, indexed_sources(collection))
+    logger.info(f"Index sync with chunk settings {CHUNK_CONFIG}")
 
     chunks_added = 0
     skipped = []
     for name in plan.add + plan.update:
         try:
-            added = index_file(index, collection, name, files[name], splitter, current[name])
+            added = index_file(index, collection, name, files[name], splitter, hashes[name])
         except Exception:
             logger.exception(f"Failed to index {name}")
             skipped.append(name)
