@@ -19,6 +19,14 @@ def test_first_hit_rank_document_and_chunk_level():
     assert ev.first_hit_rank(retrieved, "RTI Act.pdf", "not there") is None
 
 
+def test_first_hit_rank_matches_sanitized_upload_names():
+    # Uploaded files are stored under secure_filename() names.
+    retrieved = [("Consumer_Protection_Act.pdf", "consumer means any person who")]
+    assert ev.first_hit_rank(retrieved, "Consumer Protection Act,.pdf") == 1
+    retrieved = [("Arbitration__Conciliation_Act.pdf", "Appointment of arbitrators")]
+    assert ev.first_hit_rank(retrieved, "Arbitration & Conciliation Act.pdf", "appointment of arbitrators") == 1
+
+
 def test_normalize_unifies_curly_quotes():
     assert ev.normalize("“consumer”  means") == '"consumer" means'
 

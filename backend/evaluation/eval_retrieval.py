@@ -35,6 +35,19 @@ def normalize(text):
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
+def source_key(name):
+    """Compare file names the way uploads store them.
+
+    POST /documents sanitises names with werkzeug's secure_filename
+    ("IT Act.pdf" is stored as "IT_Act.pdf"), while files indexed from the
+    data directory keep their original names. Normalising both sides makes
+    the evaluation correct either way.
+    """
+    from werkzeug.utils import secure_filename
+
+    return secure_filename(name or "").lower()
+
+
 def load_questions(path):
     with open(path, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
@@ -43,8 +56,9 @@ def load_questions(path):
 def first_hit_rank(retrieved, expected_source, must_contain=None):
     """1-based rank of the first matching chunk in [(source, text), ...], or None."""
     phrase = normalize(must_contain) if must_contain else None
+    expected = source_key(expected_source)
     for rank, (source, text) in enumerate(retrieved, start=1):
-        if source != expected_source:
+        if source_key(source) != expected:
             continue
         if phrase is None or phrase in normalize(text):
             return rank
